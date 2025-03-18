@@ -1,0 +1,121 @@
+---
+title: "Gaussian Linear Model"
+author: "Priyanshu Tiwari"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+        collapse = TRUE,
+        comment = "#>",
+        warning = FALSE,
+        message = FALSE
+)
+```
+
+## Loading Torch
+
+```{r}
+library(torch)
+torch_manual_seed(1) # setting seed for reproducibility
+```
+
+## Creating a Gaussian Linear Model
+Taking example from the distributions vignette to create a Gaussian linear model.
+
+First, simulate some data:
+```{r}
+x <- torch_randn(100, 1)
+y <- 2*x + 1 + torch_randn(100, 1)
+```
+
+# Visualize this data
+```{r}
+plot(as.numeric(x), as.numeric(y), 
+     main = "Simulated Data",
+     xlab = "x", ylab = "y = 2x + 1 + noise")
+```
+# Defining the model
+
+```{r}
+GaussianLinear <- nn_module(
+  initialize = function() {
+    # this linear predictor will estimate the mean of the normal distribution
+    self$linear <- nn_linear(1, 1)
+    # this parameter will hold the estimate of the variability
+    self$scale <- nn_parameter(torch_ones(1))
+  },
+  forward = function(x) {
+    # we estimate the mean
+    loc <- self$linear(x)
+    # return a normal distribution
+    distr_normal(loc, self$scale)
+  }
+)
+
+model <- GaussianLinear()
+```
+
+Training the model
+```{r}
+opt <- optim_sgd(model$parameters, lr = 0.1)
+
+for (i in 1:100) {
+  opt$zero_grad()
+  d <- model(x)
+  loss <- torch_mean(-d$log_prob(y))
+  loss$backward()
+  opt$step()
+  if (i %% 10 == 0)
+    cat("iter: ", i, " loss: ", loss$item(), "\n")
+}
+```
+Parameter estimates
+```{r}
+model$parameters
+```
+Comparing with the glm function
+```{r}
+summary(glm(as.numeric(y) ~ as.numeric(x)))
+```
+Visualizing the model results
+
+Plot showing data and the fitted line:
+```{r}
+# Get the model parameters
+params <- model$parameters
+weight <- as.numeric(params[[1]])
+bias <- as.numeric(params[[2]])
+
+# Create a plot
+plot(as.numeric(x), as.numeric(y), 
+     main = "Gaussian Linear Model Results",
+     xlab = "x", ylab = "y")
+
+# Add the fitted line
+abline(a = bias, b = weight, col = "red", lwd = 2)
+
+# Add true line
+abline(a = 1, b = 2, col = "blue", lwd = 2, lty = 2)
+
+# Legend
+legend("topleft", 
+       legend = c(
+         paste("Fitted: y =", round(weight, 2), "x +", round(bias, 2)),
+         "True: y = 2x + 1"
+       ),
+       col = c("red", "blue"), 
+       lwd = 2,
+       lty = c(1, 2))
+```
+
+
+
+
+
+
+
+
